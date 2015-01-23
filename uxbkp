@@ -1,0 +1,738 @@
+#!/bin/bash
+#----------------------------------
+#Curitiba 05/03/2008              |
+#Nome: uxbkp (Unix Like Backup)   |
+#Por: isca0      		  |  
+#e-mail: igorsca@gmail.com        |
+#----------------------------------
+
+
+
+
+########################################
+# Modifique as variaveis locais abaixo #
+# de acordo com sua necessidade.       #
+########################################
+
+#/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+####--/Incio das Variaveis Locais\--####
+
+SRCR="/boot /usr /root /etc /var /tmp/sysb"
+DRIVE="/dev/hda"
+
+####--/Fim das Variaveis Globais\--####
+#/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+
+
+#########################################
+# Nao altere as variaveis Globais       #
+# a menos que saiba oque esta fazendo.  #
+# Modificar as variaveis globais pode   #
+# danificar o funcionamento do script . #
+#########################################
+####--/Incio das Variaveis Globais\--####
+##STRBKP##
+NAME=`uname -n`
+DATE=`date +%d%m%y`
+TMP=/tmp
+UX=uxbkp
+UXISO="$TMP"/uxiso
+SYSB="$TMP"/sysb
+UXB="$TMP"/"$UX"
+UXT="$NAME"-"$DATE".tar
+UXZ="$NAME"-"$DATE".tar.gz
+UXJ="$NAME"-"$DATE".tar.bz2
+UX7="$NAME"-"$DATE".7z
+SF="$UXB"/ftree
+SD="$UXB"/dtree
+UXRW="/tmp/UXRW"
+MKISO="/usr/bin/mkisofs"
+GROW="/usr/bin/growisofs"
+CDR="/usr/bin/cdrecord"
+RW="/usr/bin/dvd+rw-format"
+ERRO=
+####--/Fim das Variaveis Globais\--####
+
+####--/Inicio das Funcoes\--####
+
+me-ver()
+{
+clear
+echo -e "\033[1;32;40mVersao 1.2\033[0m"
+echo -e "\033[1;36;40m
+Nome: uxbkp (Unix Like Backup)\033[1;34;40m
+--------------------------------------------------------------------------------------
+- O \""$UX"\" foi desenvolvido para automatizar o backup de sistemas \"x\" como o        -
+-  caso do nosso querido GNU/Linux.                                                  -
+-                                                                                    -
+- O backup a principio é realizado com base em uma string \"##STRBKP##\" que deve      -
+- ser inserida em cada arquivo moficado, por voce e de seu interesse em salva-lo.    -
+-                                                                                    -
+- Voce poderá fazer backups recursivos em um diretório, criando um arquivo vazio     -
+- dentro do diretório desejado com o nome de \"STRBKP\" (use o comando \"touch STRBKP\"  -
+- por exemplo). Voce pode tambem especificar diretórios manualmente usado o comando  -
+- da seguinte forma: \"uxbkp /tmp /home/user /usr/local etc...\"                       -
+-                                                                                    -
+-  Uma documentacao mais completa ainda esta sendo desenvolvida.                     -
+-                                                                                    -
+- Para comecar a usar o "$UX" modifique as variaveis Locais de acordo                -
+- com suas necessidades.                                                             -
+-                                                                                    -
+- Por exemplo: mude a variavel \"SRCR\" colocando nela os locais onde o "$UX"          -
+- deve procurar por arquivos, se preferir pode colocar nessa variavel                -
+- apenas uma \"/\" para que o script procure em todo o sistema.                        -
+- A segunda variável é referente a unidade de gravacao CD/DVD que o script irá usar  -
+- para gravar os dados.                                                              -
+-                                                                                    -
+- Eu ainda nao implementei aqui rotinas de backup em fitas DDS, mas assim que eu     -
+- arrumar uma unidade de fita para testes estarei adcionando as rotinas para uma     -
+- nova versão. Se quiser me doar uma unidade de fita, eu aceito de bom grado.        -
+- Aproveite o programa e sempre faça backup's... ; )                                 -
+--------------------------------------------------------------------------------------\033[0m
+"
+echo -e "\033[1;31;40m
+Dependecias:			Opcionais:\033[0m
+\033[1;32;40m*\033[0m \033[36;40mtree				\033[1;32;40m*\033[0m \033[36;40mbzip2			\033[0m\033[36;44m+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\033[0m
+\033[1;32;40m*\033[0m \033[36;40mtar				\033[1;32;40m*\033[0m \033[36;40m7zip\033[0m			\033[0m\033[36;44m+ Por: Igor Scarinci Brandao  +\033[0m										
+\033[1;32;40m*\033[0m \033[36;40mgzip							\033[36;44m+ e-mail: igorsca@gmail.com   +\033[0m                         							
+\033[1;32;40m*\033[0m \033[36;40mcdrecord						\033[36;44m+                   Ass: ISB  +\033[0m
+\033[1;32;40m*\033[0m \033[36;40mmkisofs						\033[36;44m+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\033[0m
+\033[1;32;40m*\033[0m \033[36;40mgrowisofs\033[0m
+
+" 
+}
+
+testree()
+{
+if `tree 1>/dev/null 2>/dev/null`
+then
+	:
+else
+	echo -e "\033[31;40mo comando tree nao foi encontrado, instale ele primeiro\033[0m"
+fi
+}
+
+mesg_uxb () {
+shift
+if [ ! -d "$UXB" ]
+then
+	echo "The "$UXB" not exist."
+	echo -e "Type \033[32;40m"$0" -m \033[0mto create de "$UXB""  
+	ERRO=1
+	exit 1
+fi
+}
+
+search()
+{
+for SRCF in `find $SRCR -type f|xargs fgrep -l "#STRBKP#" 2>/dev/null`
+do
+	echo "$SRCF" >> "$SF"
+done
+for SRCF2 in `find $SRCR -type f -name STRBKP 2>/dev/null`
+do
+	echo "$SRCF2" >> "$SF"
+done
+}
+
+erro2()
+{
+ERRO=2
+echo -e "\033[1;31;40mVc deve popular "$UX" primeiro!
+Tente\033[36;40m "$0" -mcpz \033[1;31;40mpor exemplo, para fazer tudo de uma vez só...\033[0m"
+exit 2
+}
+
+err7()
+{
+ERRO=3
+echo -e "\033[1;33;40mOps!!! Essa funcao depende do 7zip.
+Verifique se ele esta corretamente instalado no sistema ou se seu caminho esta devidademente apontado no PATH.\033[0m"
+exit 3
+}
+
+del_compress()
+{
+if [ -d "$UXISO" ]
+then
+	rm -rf "$UXISO"
+fi
+}
+
+
+extra_files()
+{
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+}
+
+sys_files()
+{
+touch "$SYSB"/STRBKP
+
+lsmod > "$SYSB"/lsmod 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/lsmod 2>/dev/null
+
+df -h > "$SYSB"/dfh 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/dfh 2>/dev/null
+
+uname -a > "$SYSB"/uname-a 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/uname-a 2>/dev/null
+
+ifconfig > "$SYSB"/ifconfig 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/ifconfig 2>/dev/null
+
+iwconfig > "$SYSB"/iwconfig 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/iwconfig 2>/dev/null
+
+iptables-save >> "$SYSB"/save-tables 2>/dev/null
+echo "##STRBKP" >> "$SYSB"/save-tables 2>/dev/null
+
+cp /etc/passwd /etc/shadow /etc/group /etc/mtab /etc/issue* /etc/motd* /etc/resolv.conf* "$SYSB" 1>/dev/null 2>/dev/null 
+}
+
+dtree()
+{
+for SRCD in `find "$UXB" -type d`
+do
+	echo "$SRCD" >> "$SD"
+done
+}
+
+diso()
+{
+if [ ! -d "$UXISO" ]
+then
+	mkdir "$UXISO"
+fi
+}
+
+deliso ()
+{
+if [ -f "$TMP"/"$UX".iso ]
+then
+	rm -rf "$TMP"/"$UX".iso 
+fi
+}
+
+
+cdrw()
+{
+"$CDR" -v dev="$DRIVE" -checkdrive|grep Current|cut -d' ' -f3|cut -c5-6 > "$UXRW"
+if [ `cat "$UXRW"` == RW ]
+then
+	"$CDR" dev="$DRIVE" blank=fast
+fi
+rm -rf "$UXRW"
+}
+dvdrw()
+{
+"$CDR" -v dev="$DRIVE" -checkdrive|grep Current|cut -d' ' -f3|cut -c6-7 > "$UXRW"
+if [ `cat "$UXRW"` == RW ]
+then
+	"$RW" -blank "$DRIVE" 
+fi
+rm -rf "$UXRW"
+}
+
+#--/Fim das Funcoes\--#
+
+
+case "$1" in
+-l)
+testree
+mesg_uxb
+tree "$UXB"
+;;
+-la)
+testree
+mesg_uxb
+tree -a "$UXB"
+;;
+-lf)
+if [ -f "$SF" ]
+then
+	cat "$SF"
+else
+	echo -e "\033[31;40m"$SF" Nao foi encontrado ou "$UX" nao existe\033[0m"
+fi
+;;
+-ld)
+if [ -f "$SD" ]
+then
+	cat "$SD"
+else
+	echo -e "\033[31;40m"$SD" Nao foi encontrado tente usar "$0" -c primeiro\033[0m"
+fi
+;;
+-lt)
+if [ -f "$UXISO"/"$UXT" ]
+then
+	ls --color -lah "$UXISO"/"$UXT"
+	read -p "Deseja Listar o conteudo de "$UXT"? (s/N) :" "QUEST0"
+	if [ "$QUEST0" = s -o "$QUEST0" = S ]
+	then
+		tar tvf "$UXISO"/"$UXT"
+	fi
+else
+	echo -e "\033[31;40m"$UXISO"/"$UXT" Nao existe!!!
+\033[32;40mEntre com "$0" -t para crialo\033[0m"
+	exit 0
+fi
+;;
+-lgz)
+if [ -f "$UXISO"/"$UXZ" ]
+then
+	ls --color -lah "$UXISO"/"$UXZ"
+	read -p "Deseja Listar o conteudo de "$UXZ"? (s/N) :" "QUEST0"
+	if [ "$QUEST0" = s -o "$QUEST0" = S ]
+	then
+		tar tvzf "$UXISO"/"$UXZ"
+	fi
+else
+	echo -e "\033[31;40m"$UXISO"/"$UXZ" Nao existe!!!
+\033[32;40mEntre com "$0" -tgz para crialo\033[0m"
+	exit 0
+fi
+;;
+-lbz)
+if [ -f "$UXISO"/"$UXJ" ]
+then
+	ls --color -lah "$UXISO"/"$UXJ"
+	read -p "Deseja Listar o conteudo de "$UXJ"? (s/N) :" "QUEST0"
+	if [ "$QUEST0" = s -o "$QUEST0" = S ]
+	then
+		tar tvjf "$UXISO"/"$UXJ"
+	fi
+else
+	echo -e "\033[31;40m"$UXISO"/"$UXJ" Nao existe!!!
+\033[32;40mEntre com "$0" -tbz para crialo\033[0m"
+	exit 0
+fi
+;;
+-l7)
+if `7z 1>/dev/null 2>/dev/null`
+then
+	if [ -f "$UXISO"/"$UX7" ]
+	then
+		ls --color -lah "$UXISO"/"$UX7"
+		read -p "Deseja Listar o conteudo de "$UX7"? (s/N) :" "QUEST0"
+		if [ "$QUEST0" = s -o "$QUEST0" = S ]
+		then
+			7z l "$UXISO"/"$UX7"
+		fi
+	else
+		echo -e "\033[31;40m"$UXISO"/"$UX7" Nao existe!!!
+\033[32;40mEntre com "$0" -7z para crialo\033[0m"
+		exit 0
+	fi
+else
+	err7	
+fi
+;;
+-m)
+if [ ! -f "$SF" ]
+then
+	if [ ! -d "$UXB" ]
+	then
+		mkdir "$UXB"
+	fi	
+	search
+else
+	rm -rf "$SF"
+	search
+fi
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+;;
+-c)
+mesg_uxb
+for DIR in `cat "$SF"|grep -v STRBKP`
+do
+	PAT=`dirname "$DIR"`
+	mkdir -p "$UXB""$PAT"
+done
+
+if [ ! -f "$SD" ]
+then
+	dtree
+else
+	rm -rf "$SD"
+	dtree
+fi
+;;
+-mc)
+"$0" -m
+"$0" -c
+echo -e "\033[1;32;40m"$UXB" Pronto\033[0m"
+;;
+-cp)
+for COPY0 in "$UXB"
+do
+	for COPY1 in `cat "$SF"|grep -v STRBKP`
+	do
+		cp -rau "$COPY1" "$COPY0""$COPY1" 1>/dev/null 2>/dev/null
+	done
+
+	for COPY2 in `cat "$SF"|grep STRBKP`
+	do
+		PAT=`dirname "$COPY2"`
+		PAT1=`dirname "$PAT"`
+		if [ -d "$UXB""$PAT" ]
+		then
+			cp -rau "$PAT" "$UXB""$PAT1" 
+		else
+			mkdir -p "$UXB""$PAT1"
+			cp -rau "$PAT" "$UXB""$PAT1"
+		fi
+	done
+done
+;;
+-sysl)
+if [ -d "$SYSB" ]
+then
+	for lista in $SYSB/*
+	do
+		echo -e "\033[1;31;40mVoce esta vendo o arquivo \033[36;40m"$lista"\033[0m"
+		cat "$lista"|less
+	done
+else
+	echo -e "\033[31;40m"$SYSB" nao existe\033[32;40m
+Faca "$0" -sys para crialo primeiro.\033[0m"	
+fi
+;;
+-sys)
+if [ ! -d "$SYSB" ]
+then
+	mkdir -p "$SYSB"
+	sys_files
+else
+	rm -rf "$SYSB"/*
+	sys_files	
+fi
+;;
+-t)
+diso
+if [ -d "$TMP"/"$UX" ]
+then
+	if [ -f "$UXISO"/"$UXT" ]
+	then
+		(rm -rf "$UXISO"/"$UXT";cd "$TMP";tar cf "$UXISO"/"$UXT" "$UX")
+		echo -e "\033[1;32;40m"$UXT" foi gerado em "$UXISO"\033[0m"
+	else
+		(cd "$TMP";tar cf "$UXISO"/"$UXT" "$UX")
+		echo -e "\033[1;32;40m"$UXT" foi gerado em "$UXISO"\033[0m"
+	fi
+else
+	erro2
+fi
+;;
+-tgz)
+diso
+if [ -d "$TMP"/"$UX" ]
+then
+	if [ -f "$UXISO"/"$UXZ" ]
+	then
+		(rm -rf "$UXISO"/"$UXZ";cd "$TMP";tar czf "$UXISO"/"$UXZ" "$UX")
+		echo -e "\033[1;32;40m"$UXZ" foi gerado em "$UXISO"\033[0m"
+	else
+	
+		(cd "$TMP";tar czf "$UXISO"/"$UXZ" "$UX") 
+		echo -e "\033[1;32;40m"$UXZ" foi gerado em "$UXISO"\033[0m"
+	fi
+else
+	erro2
+fi
+;;
+-tbz)
+diso
+if [ -d "$TMP"/"$UX" ]
+then
+	if [ -f "$UXISO"/"$UXJ" ]
+	then
+		(rm -rf "$UXISO"/"$UXJ";cd "$TMP";tar cjf "$UXISO"/"$UXJ" "$UX")
+		echo -e "\033[1;32;40m"$UXJ" foi gerado em "$UXISO"\033[0m"
+	else
+		(cd "$TMP";tar cjf "$UXISO"/"$UXJ" "$UX") 
+		echo -e "\033[1;32;40m"$UXJ" foi gerado em "$UXISO"\033[0m"
+	fi
+else
+	erro2
+fi
+;;
+-7z)
+diso
+if [ -d "$TMP"/"$UX" ]
+then
+	if `7z 1>/dev/null 2>/dev/null`  
+	then
+		if [ -f "$UXISO"/"$UX7" ]
+		then
+			(rm -rf "$UXISO"/"$UX7";cd "$TMP";7z a "$UXISO"/"$UX7" "$UX")
+			echo -e "\033[1;32;40m"$UX7" foi gerado em "$UXISO"\033[0m"
+		else
+			(cd "$TMP";7z a "$UXISO"/"$UX7" "$UX")
+			echo -e "\033[1;32;40m"$UX7" foi gerado em "$UXISO"\033[0m"
+		fi
+	else
+		err7
+	fi
+else
+	erro2
+fi
+;;
+-7u)
+diso
+if [ -d "$TMP"/"$UX" ]
+then
+	if `7z 1>/dev/null 2>/dev/null`  
+	then
+		if [ -f "$UXISO"/"$UX7" ]
+		then
+			(rm -rf "$UXISO"/"$UX7";cd "$TMP";7z a -mx9 "$UXISO"/"$UX7" "$UX")
+			echo -e "\033[1;32;40m"$UX7" foi gerado em "$UXISO"\033[0m"
+		else
+			(cd "$TMP";7z a -mx9 "$UXISO"/"$UX7" "$UX")
+			echo -e "\033[1;32;40m"$UX7" foi gerado em "$UXISO"\033[0m"
+		fi
+	else
+		err7
+	fi
+else
+	erro2
+fi
+;;
+-d)
+if [ -d "$UXB" ]
+then
+	read -p "Tem certeza que deseja excluir "$UXB" definitivamente? (s/N) :" "QUEST3"
+	if [ "$QUEST3" = s -o "$QUEST3" = S ]
+	then
+		echo -e "\033[36;40mRemovendo "$UXB"...\033[0m"
+		rm -rf "$UXB"
+	fi	
+else
+	echo -e "\033[36;40m"$UXB" nao hexiste!\033[0m"
+fi
+;;
+-di)
+shift
+while [ -f "$SD" ]
+do
+	for DDIR in `cat "$SD"`
+	do	
+		DPAT=`dirname "$DDIR"`
+		for XS in "$DPAT"
+		do
+			if [ "$XS" == "."  -o "$XS" == "/tmp" ]
+			then
+				break
+			fi
+	
+			read -p "Deseja realmente remover o diretório "$XS"? (s/N) :" "QUEST1"
+			if [ "$QUEST1" = s -o "$QUEST1" = S ]
+			then
+				echo "Removendo "$XS""
+				rm -rf "$XS"
+			else
+				read -p "Deseja Continuar removendo? (S/n) :" "QUEST2"
+				if [ "$QUEST2" = n -o "$QUEST2" = N ]
+				then
+					exit 0
+				else
+					continue
+				fi
+			fi
+		done
+	done
+done
+;;
+-da)
+if [ -d "$UXB" ]
+then
+	rm -rf "$UXB"
+fi
+if [ -d "$SYSB" ]
+then
+	rm -rf "$SYSB"
+fi
+deliso
+del_compress
+echo -e "\033[32;40mTudo destruido com sucesso!\033[0m"
+;;
+-df)
+del_compress
+echo -e "\033[32;40mOs comprimidos nao hexistem mais!\033[0m"
+;;
+-mcp)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+;;
+-mcpt)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+"$0" -t
+;;
+-mcpz)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+"$0" -tgz
+;;
+-mcpb)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+"$0" -tbz
+;;
+-mcp7)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+"$0" -7z
+;;
+-mcp7u)
+"$0" -da>/dev/null
+"$0" -sys 2>/dev/null
+"$0" -m
+shift
+if [ -d "$1" ]
+then
+	for XA in "$*"
+	do
+		echo "$XA"|tr ' ' '\n' >> "$SF"
+	done
+fi
+"$0" -c
+"$0" -cp
+"$0" -7u
+;;
+-cdr)
+deliso
+"$MKISO" -o "$UXB".iso -r "$UXB"
+cdrw
+"$CDR" -v dev="$DRIVE" -overburn -data "$UXB".iso
+;;
+-cdf)
+deliso
+"$MKISO" -o "$UXB".iso -r "$UXISO"
+cdrw
+"$CDR" -v dev="$DRIVE" -overburn -data "$UXB".iso
+;;
+-dvd)
+deliso
+"$MKISO" -o "$UXB".iso -r "$UXB"
+dvdrw
+"$GROW" -use-the-force-luke=tty -dvd-compat -overburn -Z "$DRIVE"="$UXB".iso 
+;;
+-dvt)
+deliso
+"$MKISO" -o "$UXB".iso -r "$UXISO"
+dvdrw
+"$GROW" -use-the-force-luke=tty -dvd-compat -overburn -Z "$DRIVE"="$UXB".iso 
+;;
+-v)
+me-ver
+;;
+*)
+echo -e "\033[1;32;40mModo de Usar:\033[0m 
+	\033[1;34;40m-m\033[0m	\033[32;40m(Cria "$UXB") { ex:[ uxbkp -m ] ou [ uxbkp -m /dir1... /dir2... etc... ] }\033[0m
+	\033[1;34;40m-c\033[0m	\033[32;40m(Cria árvore)\033[0m
+	\033[1;34;40m-mc\033[0m	\033[32;40m(Cria e popula árvore)\033[0m
+	\033[1;34;40m-cp\033[0m	\033[32;40m(Copia clone "$UXB" como árvore)\033[0m
+	\033[1;34;40m-sysl\033[0m	\033[32;40m(Veja as entradas em sysb)\033[0m
+	\033[1;34;40m-sys\033[0m	\033[32;40m(Informacoes adcionais,como ifconfig,df e saidas do iptables-save)\033[0m
+	\033[1;34;40m-t\033[0m	\033[32;40m(Gera um pacote tar)\033[0m
+	\033[1;34;40m-tgz\033[0m	\033[32;40m(Gera um pacote tar comprimido com o gzip)\033[0m
+	\033[1;34;40m-tbz\033[0m	\033[32;40m(Pacote tar comprimido pelo bzip)\033[0m
+	\033[1;34;40m-7z\033[0m	\033[32;40m(Compressao com o 7z em modo normal)\033[0m
+	\033[1;34;40m-7u\033[0m	\033[32;40m(Compressao Ultra com 7z)\033[0m
+	\033[1;34;40m-mcp\033[0m	\033[32;40m(Cria, gera e popula a árvore)\033[0m
+	\033[1;34;40m-mcpt\033[0m	\033[32;40m(O mesmo que o mcp com pacote tar)\033[0m
+	\033[1;34;40m-mcpz\033[0m	\033[32;40m(O mesmo que mcp com gzip)\033[0m
+	\033[1;34;40m-mcpb\033[0m	\033[32;40m(O mesmo que mcp com bzip)\033[0m
+	\033[1;34;40m-mcp7\033[0m	\033[32;40m(O mesmo que mcp com 7zip)\033[0m
+	\033[1;34;40m-mcp7u\033[0m	\033[32;40m(O mesmo que o mcp7 com ultra compressao)\033[0m
+	\033[1;34;40m-dvd\033[0m    \033[32;40m(Grava um DvD com os arquivos encontrados em "$UXB")\033[0m
+	\033[1;34;40m-dvt\033[0m    \033[32;40m(Grava um DvD com os arquivos encontrados em "$UXISO")\033[0m
+	\033[1;34;40m-d\033[0m	\033[32;40m(destroi "$UXB")\033[0m
+	\033[1;34;40m-da\033[0m	\033[32;40m(destroi "$UXB" e tudo mais que foi gerado)\033[0m
+        \033[1;34;40m-di\033[0m	\033[32;40m(destruicao interativa)\033[0m
+	\033[1;34;40m-df\033[0m	\033[32;40m(destroi os arquivos comprimidos e ISO's)\033[0m
+	\033[1;34;40m-l\033[0m	\033[32;40m(lista árvore)\033[0m
+	\033[1;34;40m-la\033[0m	\033[32;40m(lista árvore e ocultos)\033[0m
+	\033[1;34;40m-ld\033[0m	\033[32;40m(lista o arquivo \"dtree\")\033[0m
+	\033[1;34;40m-lf\033[0m	\033[32;40m(lista o arquivo \"ftree\")\033[0m
+	\033[1;34;40m-lt\033[0m	\033[32;40m(lista arquivo tar)\033[0m
+	\033[1;34;40m-lbz\033[0m	\033[32;40m(lista arquivo bzip2)\033[0m
+	\033[1;34;40m-lgz\033[0m	\033[32;40m(lista arquivo gzip)\033[0m
+	\033[1;34;40m-l7\033[0m	\033[32;40m(lista arquivo 7zip)\033[0m
+	\033[1;34;40m-v\033[0m	\033[32;40m(versao e notas do autor)\033[0m
+									"
+ERRO=4
+exit 4
+;;
+esac
